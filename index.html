@@ -9,7 +9,7 @@
   <ul>
     <li><button onclick='switchRectangle()'>Rectangle</button></li>
     <li><button onclick='switchEllipse()'>Ellipse</button></li>
-    <li><button>Lasso</button></li>
+    <li><button onclick='switchLasso()'>Lasso</button></li>
   </ul>
   <script>
     const RECTANGLE_MODE = 'rectangle';
@@ -31,6 +31,19 @@
       drawingMode: false,
       currentDrawingShapeInstance: ''
     };
+
+const shapeCopy = {
+  [RECTANGLE_MODE]: function (source, currentX, currentY) {
+    return {...source, currentX, currentY};
+  },
+  [ELLIPSE_MODE]: function (source, currentX, currentY) {
+    return {...source, currentX, currentY};
+  },
+  [LASSO_MODE]: function (source, currentX, currentY) {
+    console.log('creating lasso copy:', arguments);
+    return {...source, points: (source.points || []).concat({x: currentX, y: currentY})};
+  }
+};
 
     function reducer(state, action) {
       if (state !== undefined) {
@@ -82,7 +95,7 @@
             const currentShape = state.items.find(shape => shape.createdAt === state.currentDrawingShapeInstance);
             // We want to change the currentX and currentY for this shape in a functional way;
             // so we filter out the current shape from our list of shapes, and then add a new revised copy of our current shape with the new coordinates
-            return {...state, items: state.items.filter(shape => shape.createdAt !== state.currentDrawingShapeInstance).concat({...currentShape, currentX, currentY})}
+            return {...state, items: state.items.filter(shape => shape.createdAt !== state.currentDrawingShapeInstance).concat(shapeCopy[currentShape.shape](currentShape, currentX, currentY))}
           default:
             return state;
         }
@@ -94,11 +107,12 @@
     const shapeRenderers = {
       [RECTANGLE_MODE]: function  (context, rectangle)  {
         console.log('rectangle:', rectangle);
-        const width = rectangle.currentX - rectangle.initialX;
-        const height = rectangle.currentY - rectangle.initialY;
+        const { initialX, initialY, currentX, currentY} = rectangle;
+        const width = currentX - initialX;
+        const height = currentY - initialY;
         context.lineWidth = 3;
         context.strokeStyle = 'red';
-        context.strokeRect(rectangle.initialX, rectangle.initialY, width, height);
+        context.strokeRect(initialX, initialY, width, height);
       },
       [ELLIPSE_MODE]: function(context, ellipse) {
         const { initialX, initialY, currentX, currentY} = ellipse;
@@ -112,7 +126,18 @@
         context.closePath();
       },
       [LASSO_MODE]: function(context, lasso) {
-
+        const {initialX, initialY, points = []} =  lasso;
+        console.log('rendering lasso:', lasso);
+        context.lineWidth = 4;
+        context.strokeStyle =  'green';
+        context.beginPath();
+        context.moveTo(initialX, initialY);
+        const coordinates =  points.map(Object.values).flat();
+        for (let count = 0;  count < coordinates.length ;  count += 2) {
+          context.lineTo(coordinates[count], coordinates[count  + 1]);
+        }
+        context.stroke();
+        context.closePath();
       }
     };
 
@@ -142,6 +167,11 @@
 
     function switchEllipse() {
       store.dispatch({type: 'SHAPE_MODE', drawingShape: ELLIPSE_MODE});
+    }
+
+    function  switchLasso() {
+      store.dispatch({type: 'SHAPE_MODE', drawingShape: LASSO_MODE});
+
     }
 
     canvas.addEventListener('mousedown', function(event) {
