@@ -20,10 +20,7 @@
     const ctx = canvas.getContext("2d");
     const initialState = {
       canvas: { x: 0, y: 0 },
-      items: [
-        // { id: 1, x: 10, y: 10, width: 50, height: 50, color: 'red' },
-        // { id: 2, x: 30, y: 30, width: 50, height: 50, color: 'blue' }
-      ],
+      items: [],
       xDragging: null,
       yDragging: null,
       draggingItemId: null,
@@ -51,38 +48,6 @@ const shapeCopy = {
         const {id, type, xDragging, yDragging, drawingShape, drawingMode, initialX, initialY, currentX = initialX, currentY = initialY, currentDrawingShapeInstance} = action;
         console.log('reducer received action:', type);
         switch (type) {
-          // case 'TRANSLATE_CANVAS_START':
-          //   return {canvas, items, xDragging, yDragging, draggingItemId: null};
-          // case 'TRANSLATE_CANVAS':
-          //   return {
-          //     canvas: {
-          //       x: canvas.x + xDragging - state.xDragging,
-          //       y: canvas.y + yDragging - state.yDragging
-          //     },
-          //     items, xDragging, yDragging, draggingItemId: null
-          //   };
-          // case 'TRANSLATE_CANVAS_END':
-          //   return {canvas, items, xDragging: null, yDragging: null, draggingItemId: null};
-          // case 'TRANSLATE_ITEM_START':
-          //   return {canvas, items, xDragging, yDragging, draggingItemId: id};
-          // case 'TRANSLATE_ITEM':
-          //   const newItems = items.map(function(item) {
-          //     if (item.id === draggingItemId) {
-          //       return {
-          //         id: item.id,
-          //         x: item.x + xDragging - state.xDragging,
-          //         y: item.y + yDragging - state.yDragging,
-          //         width: item.width,
-          //         height: item.height,
-          //         color: item.color
-          //       };
-          //     } else {
-          //       return item;
-          //     }
-          //   });
-          //   return {canvas, items: newItems, xDragging, yDragging, draggingItemId};
-          // case 'TRANSLATE_ITEM_END':
-          //   return {canvas, items, xDragging: null, yDragging: null, draggingItemId: null};
           case 'SHAPE_MODE':
              return {...state, drawingShape};
           case 'DRAWING_MODE':
@@ -136,6 +101,8 @@ const shapeCopy = {
         for (let count = 0;  count < coordinates.length ;  count += 2) {
           context.lineTo(coordinates[count], coordinates[count  + 1]);
         }
+        // TODO: Should starting point always connect to last point?
+        context.lineTo(initialX, initialY);
         context.stroke();
         context.closePath();
       }
@@ -181,25 +148,6 @@ const shapeCopy = {
       console.log('drawing shape:', state.drawingShape);
       console.log('drawing mode:', state.drawingMode);
       store.dispatch({type: 'ADD_SHAPE', initialX: event.offsetX, initialY: event.offsetY});
-      // for (var i = state.items.length - 1; i >= 0; i--) {
-      //   var item = state.items[i];
-      //   ctx.beginPath();
-      //   ctx.rect(item.x, item.y, item.width, item.height);
-      //   if (ctx.isPointInPath(event.offsetX, event.offsetY)) {
-      //     store.dispatch({
-      //       type: 'TRANSLATE_ITEM_START',
-      //       id: item.id,
-      //       xDragging: event.offsetX,
-      //       yDragging: event.offsetY
-      //     });
-      //     return;
-      //   }
-      // }
-      // store.dispatch({
-      //   type: 'TRANSLATE_CANVAS_START',
-      //   xDragging: event.offsetX,
-      //   yDragging: event.offsetY
-      // });
     }, false);
 
     canvas.addEventListener('mousemove', function(event) {
@@ -208,25 +156,12 @@ const shapeCopy = {
         store.dispatch({type: 'RESIZE_SHAPE', currentX: event.offsetX, currentY: event.offsetY});
       }
 
-      // if (state.draggingItemId !== null) {
-      //   store.dispatch({
-      //     type: 'TRANSLATE_ITEM',
-      //     xDragging: event.offsetX,
-      //     yDragging: event.offsetY
-      //   });
-      // } else if (state.xDragging !== null && state.yDragging !== null) {
-      //   store.dispatch({
-      //     type: 'TRANSLATE_CANVAS',
-      //     xDragging: event.offsetX,
-      //     yDragging: event.offsetY
-      //   });
-      // }
     }, false);
 
     canvas.addEventListener('mouseup', function(event) {
       store.dispatch({type: 'DRAWING_MODE', drawingMode: false});
       const state = store.getState();
-      // store.dispatch({type: state.draggingItemId !== null ? 'TRANSLATE_ITEM_END' : 'TRANSLATE_CANVAS_END'});
+      // TODO: if we need to immediately  store the shape, then export newly created shape as event
       console.log('mouse up - drawing mode:', state.drawingMode);
     }, false);
 
