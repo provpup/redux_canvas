@@ -8,7 +8,7 @@
   <canvas id="drawingArea"></canvas>
   <ul>
     <li><button onclick='switchRectangle()'>Rectangle</button></li>
-    <li><button>Ellipse</button></li>
+    <li><button onclick='switchEllipse()'>Ellipse</button></li>
     <li><button>Lasso</button></li>
   </ul>
   <script>
@@ -38,38 +38,38 @@
         const {id, type, xDragging, yDragging, drawingShape, drawingMode, initialX, initialY, currentX = initialX, currentY = initialY, currentDrawingShapeInstance} = action;
         console.log('reducer received action:', type);
         switch (type) {
-          case 'TRANSLATE_CANVAS_START':
-            return {canvas, items, xDragging, yDragging, draggingItemId: null};
-          case 'TRANSLATE_CANVAS':
-            return {
-              canvas: {
-                x: canvas.x + xDragging - state.xDragging,
-                y: canvas.y + yDragging - state.yDragging
-              },
-              items, xDragging, yDragging, draggingItemId: null
-            };
-          case 'TRANSLATE_CANVAS_END':
-            return {canvas, items, xDragging: null, yDragging: null, draggingItemId: null};
-          case 'TRANSLATE_ITEM_START':
-            return {canvas, items, xDragging, yDragging, draggingItemId: id};
-          case 'TRANSLATE_ITEM':
-            const newItems = items.map(function(item) {
-              if (item.id === draggingItemId) {
-                return {
-                  id: item.id,
-                  x: item.x + xDragging - state.xDragging,
-                  y: item.y + yDragging - state.yDragging,
-                  width: item.width,
-                  height: item.height,
-                  color: item.color
-                };
-              } else {
-                return item;
-              }
-            });
-            return {canvas, items: newItems, xDragging, yDragging, draggingItemId};
-          case 'TRANSLATE_ITEM_END':
-            return {canvas, items, xDragging: null, yDragging: null, draggingItemId: null};
+          // case 'TRANSLATE_CANVAS_START':
+          //   return {canvas, items, xDragging, yDragging, draggingItemId: null};
+          // case 'TRANSLATE_CANVAS':
+          //   return {
+          //     canvas: {
+          //       x: canvas.x + xDragging - state.xDragging,
+          //       y: canvas.y + yDragging - state.yDragging
+          //     },
+          //     items, xDragging, yDragging, draggingItemId: null
+          //   };
+          // case 'TRANSLATE_CANVAS_END':
+          //   return {canvas, items, xDragging: null, yDragging: null, draggingItemId: null};
+          // case 'TRANSLATE_ITEM_START':
+          //   return {canvas, items, xDragging, yDragging, draggingItemId: id};
+          // case 'TRANSLATE_ITEM':
+          //   const newItems = items.map(function(item) {
+          //     if (item.id === draggingItemId) {
+          //       return {
+          //         id: item.id,
+          //         x: item.x + xDragging - state.xDragging,
+          //         y: item.y + yDragging - state.yDragging,
+          //         width: item.width,
+          //         height: item.height,
+          //         color: item.color
+          //       };
+          //     } else {
+          //       return item;
+          //     }
+          //   });
+          //   return {canvas, items: newItems, xDragging, yDragging, draggingItemId};
+          // case 'TRANSLATE_ITEM_END':
+          //   return {canvas, items, xDragging: null, yDragging: null, draggingItemId: null};
           case 'SHAPE_MODE':
              return {...state, drawingShape};
           case 'DRAWING_MODE':
@@ -82,7 +82,7 @@
             const currentShape = state.items.find(shape => shape.createdAt === state.currentDrawingShapeInstance);
             // We want to change the currentX and currentY for this shape in a functional way;
             // so we filter out the current shape from our list of shapes, and then add a new revised copy of our current shape with the new coordinates
-            return {...state, items: state.items.filter(shape => shape.createdAt !== currentDrawingShapeInstance).concat({...currentShape, currentX, currentY})}
+            return {...state, items: state.items.filter(shape => shape.createdAt !== state.currentDrawingShapeInstance).concat({...currentShape, currentX, currentY})}
           default:
             return state;
         }
@@ -94,13 +94,22 @@
     const shapeRenderers = {
       [RECTANGLE_MODE]: function  (context, rectangle)  {
         console.log('rectangle:', rectangle);
-        const width = Math.abs(rectangle.currentX - rectangle.initialX);
-        const height = Math.abs(rectangle.currentY - rectangle.initialY);
-        context.fillStyle = 'red';
-        context.fillRect(rectangle.initialX, rectangle.initialY, width, height);
+        const width = rectangle.currentX - rectangle.initialX;
+        const height = rectangle.currentY - rectangle.initialY;
+        context.lineWidth = 3;
+        context.strokeStyle = 'red';
+        context.strokeRect(rectangle.initialX, rectangle.initialY, width, height);
       },
       [ELLIPSE_MODE]: function(context, ellipse) {
-
+        const { initialX, initialY, currentX, currentY} = ellipse;
+        console.log('ellpse:', ellipse);
+        const radius = Math.hypot(currentX - initialX, currentY - initialY);
+        context.beginPath();
+        context.strokeStyle = 'blue';
+        context.lineWidth = 5;
+        context.arc(initialX, initialY, radius, (Math.PI/180)*0, (Math.PI/180)*360, false)
+        context.stroke();
+        context.closePath();
       },
       [LASSO_MODE]: function(context, lasso) {
 
@@ -117,6 +126,7 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.setTransform(1, 0, 0, 1, state.canvas.x, state.canvas.y);
       state.items.sort(byTimestamp).forEach(function(item) {
+        console.log(arguments);
         shapeRenderers[item.shape](ctx, item);
       });
     }
@@ -128,6 +138,10 @@
 
     function switchRectangle() {
       store.dispatch({type: 'SHAPE_MODE', drawingShape: RECTANGLE_MODE});
+    }
+
+    function switchEllipse() {
+      store.dispatch({type: 'SHAPE_MODE', drawingShape: ELLIPSE_MODE});
     }
 
     canvas.addEventListener('mousedown', function(event) {
@@ -182,7 +196,7 @@
     canvas.addEventListener('mouseup', function(event) {
       store.dispatch({type: 'DRAWING_MODE', drawingMode: false});
       const state = store.getState();
-      store.dispatch({type: state.draggingItemId !== null ? 'TRANSLATE_ITEM_END' : 'TRANSLATE_CANVAS_END'});
+      // store.dispatch({type: state.draggingItemId !== null ? 'TRANSLATE_ITEM_END' : 'TRANSLATE_CANVAS_END'});
       console.log('mouse up - drawing mode:', state.drawingMode);
     }, false);
 
