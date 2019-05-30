@@ -38,7 +38,6 @@
         return {...source, currentX, currentY};
       },
       [LASSO_MODE]: function (source, currentX, currentY) {
-        console.log('creating lasso copy:', arguments);
         return {...source, points: (source.points || []).concat({x: currentX, y: currentY})};
       }
     };
@@ -123,7 +122,7 @@
     }
 
     const shapeRenderers = {
-      [RECTANGLE_MODE]: function  (context, rectangle)  {
+      [RECTANGLE_MODE]: function(context, rectangle)  {
         console.log('rendering rectangle:', rectangle);
         const { initialX, initialY, currentX, currentY} = rectangle;
         const width = currentX - initialX;
@@ -143,16 +142,19 @@
       [LASSO_MODE]: function(context, lasso) {
         const {initialX, initialY, points = []} = lasso;
         console.log('rendering lasso:', lasso);
-        context.lineWidth = 4;
-        context.strokeStyle = 'green';
+        context.lineWidth = 1;
+        context.setLineDash([3,3,3]);
+        context.strokeStyle = 'rgb(211, 211, 211)';
         context.moveTo(initialX, initialY);
         const coordinates = points.map(Object.values).flat();
         for (let count = 0; count < coordinates.length ; count += 2) {
           context.lineTo(coordinates[count], coordinates[count + 1]);
         }
-        // TODO: Should starting point always connect to last point?
         // close lasso
-        ctx.closePath();
+        context.closePath();
+        context.fillStyle = "rgb(211, 211, 211, 0.1)";
+        context.fill()
+
       }
     };
 
@@ -166,7 +168,6 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.setTransform(1, 0, 0, 1, state.canvas.x, state.canvas.y);
       state.items.sort(byTimestamp).forEach(function(item) {
-        // console.log(arguments);
         ctx.beginPath();
         shapeRenderers[item.shape](ctx, item);
         ctx.stroke();
@@ -204,8 +205,10 @@
       } else {
         // Select and drag shapes
         for (let i = state.items.length - 1; i >= 0; i--) {
+          const item = state.items[i];
+          ctx.beginPath();
+          shapeRenderers[item.shape](ctx, item);
           if (ctx.isPointInPath(event.offsetX, event.offsetY)) {
-            const item = state.items[i];
             console.log('isPointInPath', item);
             store.dispatch({
               type: 'TRANSLATE_ITEM_START',
