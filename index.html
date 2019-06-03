@@ -5,7 +5,7 @@
   <script src="https://unpkg.com/redux@latest/dist/redux.min.js"></script>
 </head>
 <body>
-  <canvas id="drawingArea"></canvas>
+  <canvas width="800" height="700" id="drawingArea"  style="background: url('./sample3.jpg')"></canvas>
   <ul>
     <li><button onclick='switchRectangle()'>Rectangle</button></li>
     <li><button onclick='switchEllipse()'>Ellipse</button></li>
@@ -13,13 +13,20 @@
     <li><button onclick='switchSelect()'>Select</button></li>
   </ul>
   <script>
+
     const RECTANGLE_MODE = 'rectangle';
     const ELLIPSE_MODE = 'ellipse';
     const LASSO_MODE = 'lasso';
 
+    const closeEnough = 10;
+    let dragTL = dragBL = dragTR = dragBR = false;
+    let currentShape;
+
     const canvas = document.getElementById('drawingArea');
     const ctx = canvas.getContext('2d');
+
     const initialState = {
+      activeSelection: null,
       canvas: { x: 0, y: 0 },
       items: [],
       xDragging: null,
@@ -45,13 +52,24 @@
     function reducer(state, action) {
       if (state !== undefined) {
         const {
-          canvas, currentDrawingShapeInstance, draggingItemId, items,
+          canvas,
+          currentDrawingShapeInstance,
+          draggingItemId,
+          items,
         } = state;
         const {
-          activeSelection, id, type, xDragging, yDragging, drawingShape, drawingMode, initialX, initialY, currentX = initialX, currentY = initialY,
+          activeSelection,
+          initialX,
+          initialY,
+          currentX = initialX,
+          currentY = initialY,
+          drawingShape,
+          drawingMode,
+          id,
+          type,
+          xDragging,
+          yDragging,
         } = action;
-        console.log('reducer received action:', type);
-        console.log(items);
         switch (type) {
         case 'SHAPE_MODE':
           return { ...state, drawingShape };
@@ -64,17 +82,18 @@
           return { ...state, items: items.concat(newShape), currentDrawingShapeInstance: newShape.createdAt };
         case 'RESIZE_SHAPE':
           // Get the current shape based on the saved timestamp
-          const currentShape = items.find(shape => shape.createdAt === currentDrawingShapeInstance);
+          currentShape = items.find(shape => shape.createdAt === currentDrawingShapeInstance);
           // We want to change the currentX and currentY for this shape in a functional way;
           // so we filter out the current shape from our list of shapes, and then add a new revised copy of our current shape with the new coordinates
           return { ...state, items: items.filter(shape => shape.createdAt !== currentDrawingShapeInstance).concat(shapeCopy[currentShape.shape](currentShape, currentX, currentY)) };
+        case 'RESIZE_RECT_TR':
+          currentShape = items.find(shape => shape.createdAt === state.activeSelection.createdAt);
+          return { ...state, items: items.filter(shape => shape.createdAt !== currentShape.createdAt).concat(shapeCopy[currentShape.shape](currentShape, currentX, currentY)) };
         case 'SET_ACTIVE':
           return { ...state, activeSelection };
         case 'TRANSLATE_ITEM_START':
           return {
-            createdAt: id,
-            canvas,
-            items,
+            ...state,
             xDragging,
             yDragging,
             draggingItemId: id,
@@ -105,7 +124,7 @@
             }
           });
           return {
-            canvas,
+            ...state,
             items: newItems,
             xDragging,
             yDragging,
@@ -113,8 +132,7 @@
           };
         case 'TRANSLATE_ITEM_END':
           return {
-            canvas,
-            items,
+            ...state,
             xDragging: null,
             yDragging: null,
             draggingItemId: null,
@@ -129,10 +147,7 @@
 
     const shapeRenderers = {
       [RECTANGLE_MODE](context, rectangle) {
-        console.log('rendering rectangle:', rectangle);
-        const {
-          initialX, initialY, currentX, currentY,
-        } = rectangle;
+        const { initialX, initialY, currentX, currentY } = rectangle;
         const width = currentX - initialX;
         const height = currentY - initialY;
         context.lineWidth = 3;
@@ -140,10 +155,7 @@
         context.rect(initialX, initialY, width, height);
       },
       [ELLIPSE_MODE](context, ellipse) {
-        const {
-          initialX, initialY, currentX, currentY,
-        } = ellipse;
-        console.log('rendering ellpse:', ellipse);
+        const { initialX, initialY, currentX, currentY } = ellipse;
         const radius = Math.hypot(currentX - initialX, currentY - initialY);
         context.strokeStyle = 'blue';
         context.lineWidth = 5;
@@ -151,10 +163,9 @@
       },
       [LASSO_MODE](context, lasso) {
         const { initialX, initialY, points = [] } = lasso;
-        console.log('rendering lasso:', lasso);
         context.lineWidth = 1;
-        // context.setLineDash([3,3,3]);
-        context.strokeStyle = 'rgb(211, 211, 211)';
+        context.strokeStyle = 'black';
+        context.fillStyle = 'rgb(211, 211, 211, 0.3)';
         context.moveTo(initialX, initialY);
         const coordinates = points.map(Object.values).flat();
         for (let count = 0; count < coordinates.length; count += 2) {
@@ -162,7 +173,6 @@
         }
         // close lasso
         context.closePath();
-        context.fillStyle = 'rgb(211, 211, 211, 0.1)';
         context.fill();
       },
     };
@@ -171,8 +181,48 @@
       return a.createdAt - b.createdAt;
     }
 
+    function checkCloseEnough(p1, p2) {
+        return Math.abs(p1 - p2) < closeEnough;
+    }
+
+    function checkCorners(event, item) {
+      const { initialX, initialY, currentX, currentY } = item;
+      const { offsetX, offsetY } = event;
+      if (checkCloseEnough(offsetX, initialX) && checkCloseEnough(offsetY, initialY)) {
+        dragBL = true;
+        return;
+      } else if (checkCloseEnough(offsetX, currentX) && checkCloseEnough(offsetY, initialY)) {
+        dragBR = true;
+        return;
+      } else if (checkCloseEnough(offsetX, initialX) && checkCloseEnough(offsetY, currentY)) {
+        dragTL = true;
+        return;
+      } else if (checkCloseEnough(offsetX, currentX) && checkCloseEnough(offsetY, currentY)) {
+        dragTR = true;
+        return;
+      }
+    }
+
+    function drawRectangleHandles(state, item) {
+      const { initialX, initialY, currentX, currentY, createdAt, shape } = item;
+      if (state.activeSelection && createdAt === state.activeSelection.createdAt && shape === 'rectangle') {
+        drawCircle(initialX, initialY, closeEnough); // bottom left
+        drawCircle(currentX, currentY, closeEnough); // top right
+        drawCircle(currentX, initialY, closeEnough); // bottom right
+        drawCircle(initialX, currentY, closeEnough); // top left
+      }
+    }
+
+    function drawCircle(x, y, radius) {
+      ctx.fillStyle = "#FF0000";
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
     function draw() {
       const state = store.getState();
+      console.log(state)
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.setTransform(1, 0, 0, 1, state.canvas.x, state.canvas.y);
@@ -180,6 +230,7 @@
         ctx.beginPath();
         shapeRenderers[item.shape](ctx, item);
         ctx.stroke();
+        drawRectangleHandles(state, item);
       });
     }
 
@@ -203,60 +254,68 @@
     }
 
     canvas.addEventListener('mousedown', (event) => {
-      store.dispatch({ type: 'DRAWING_MODE', drawingMode: true });
+      const { offsetX, offsetY } = event;
       const state = store.getState();
-      // console.log('drawing shape:', state.drawingShape);
-      // console.log('drawing mode:', state.drawingMode);
+      store.dispatch({ type: 'DRAWING_MODE', drawingMode: true });
       if (state.drawingShape) {
         // Start creating a shape
-        store.dispatch({ type: 'ADD_SHAPE', initialX: event.offsetX, initialY: event.offsetY });
+        store.dispatch({ type: 'ADD_SHAPE', initialX: offsetX, initialY: offsetY });
         return;
       }
       // Select and drag shapes
       for (let i = state.items.length - 1; i >= 0; i--) {
         const item = state.items[i];
+        checkCorners(event, item)
         ctx.beginPath();
         shapeRenderers[item.shape](ctx, item);
-        if (ctx.isPointInPath(event.offsetX, event.offsetY)) {
+        if (ctx.isPointInPath(offsetX, offsetY)) {
           console.log('isPointInPath', item);
           store.dispatch({
             type: 'SET_ACTIVE',
-            id: item.createdAt,
+            activeSelection: item,
           });
           store.dispatch({
             type: 'TRANSLATE_ITEM_START',
             id: item.createdAt,
-            xDragging: event.offsetX,
-            yDragging: event.offsetY,
+            xDragging: offsetX,
+            yDragging: offsetY,
           });
           return;
+        } else {
+          // store.dispatch({
+          //   type: 'SET_ACTIVE',
+          //   activeSelection: '',
+          // });
         }
       }
     }, false);
 
     canvas.addEventListener('mousemove', (event) => {
+      const { offsetX, offsetY } = event;
       const state = store.getState();
+      if (dragTR) {
+        store.dispatch({ type: 'RESIZE_RECT_TR', currentX: offsetX, currentY: offsetY});
+      }
       if (state.drawingMode && state.drawingShape) {
-        store.dispatch({ type: 'RESIZE_SHAPE', currentX: event.offsetX, currentY: event.offsetY });
+        store.dispatch({ type: 'RESIZE_SHAPE', currentX: offsetX, currentY: offsetY });
       } else if (state.draggingItemId !== null) {
         store.dispatch({
           type: 'TRANSLATE_ITEM',
-          xDragging: event.offsetX,
-          yDragging: event.offsetY,
+          xDragging: offsetX,
+          yDragging: offsetY,
         });
       }
     }, false);
 
     canvas.addEventListener('mouseup', () => {
+      const state = store.getState();
       store.dispatch({ type: 'TRANSLATE_ITEM_END' });
       store.dispatch({ type: 'DRAWING_MODE', drawingMode: false });
-      const state = store.getState();
+      dragTL = dragTR = dragBL = dragBR = false;
       // TODO: if we need to immediately  store the shape, then export newly created shape as event
-      console.log('mouse up - drawing mode:', state.drawingMode);
     }, false);
 
     draw();
     </script>
   </body>
 </html>
-
