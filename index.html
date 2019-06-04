@@ -49,6 +49,38 @@
       },
     };
 
+    const shapeCopyTranslate = {
+      [RECTANGLE_MODE](source, state, xDragging, yDragging) {
+        const { initialX, initialY, currentX, currentY } = source;
+        return {
+          ...source,
+          initialX: initialX + xDragging - state.xDragging,
+          initialY: initialY + yDragging - state.yDragging,
+          currentX: currentX + xDragging - state.xDragging,
+          currentY: currentY + yDragging - state.yDragging
+        };
+      },
+      [ELLIPSE_MODE](source, state, xDragging, yDragging) {
+        const { initialX, initialY, currentX, currentY } = source;
+        return {
+          ...source,
+          initialX: initialX + xDragging - state.xDragging,
+          initialY: initialY + yDragging - state.yDragging,
+          currentX: currentX + xDragging - state.xDragging,
+          currentY: currentY + yDragging - state.yDragging
+        };
+      },
+      [LASSO_MODE](source, state, xDragging, yDragging) {
+        const { initialX, initialY, points } = source;
+        return {
+          ...source,
+          initialX: initialX + xDragging - state.xDragging,
+          initialY: initialY + yDragging - state.yDragging,
+          points: points.map(point => ({ x: point.x + xDragging - state.xDragging, y: point.y + yDragging - state.yDragging })),
+        };
+      },
+    };
+
     function reducer(state, action) {
       if (state !== undefined) {
         const {
@@ -99,36 +131,15 @@
             draggingItemId: id,
           };
         case 'TRANSLATE_ITEM':
-          const newItems = items.map((item) => {
-            if (draggingItemId === item.createdAt) {
-              if (item.shape === 'ellipse' || item.shape === 'rectangle') {
-                return {
-                  createdAt: item.createdAt,
-                  initialX: item.initialX + xDragging - state.xDragging,
-                  initialY: item.initialY + yDragging - state.yDragging,
-                  currentX: item.currentX + xDragging - state.xDragging,
-                  currentY: item.currentY + yDragging - state.yDragging,
-                  shape: item.shape,
-                };
-              } if (item.shape === 'lasso') {
-                return {
-                  createdAt: item.createdAt,
-                  initialX: item.initialX + xDragging - state.xDragging,
-                  initialY: item.initialY + yDragging - state.yDragging,
-                  points: item.points.map(point => ({ x: point.x + xDragging - state.xDragging, y: point.y + yDragging - state.yDragging })),
-                  shape: item.shape,
-                };
-              }
-            } else {
-              return item;
-            }
-          });
+          currentShape = items.find(shape => shape.createdAt === state.activeSelection.createdAt);
           return {
             ...state,
-            items: newItems,
             xDragging,
             yDragging,
             draggingItemId,
+            items: items
+              .filter(shape => shape.createdAt !== currentShape.createdAt)
+              .concat(shapeCopyTranslate[currentShape.shape](currentShape, state, xDragging, yDragging))
           };
         case 'TRANSLATE_ITEM_END':
           return {
@@ -146,10 +157,16 @@
     }
 
     const shapeRenderers = {
-      [RECTANGLE_MODE](context, rectangle) {
+      [RECTANGLE_MODE](context, rectangle, resize) {
         const { initialX, initialY, currentX, currentY } = rectangle;
-        const width = currentX - initialX;
-        const height = currentY - initialY;
+        let width = currentX - initialX;
+        let height = currentY - initialY;
+        if (resize === 'tl') {
+          width += initialX - currentX;
+          height += initialY - currentY
+          initialX = currentX;
+          initialY = currentY;
+        }
         context.lineWidth = 3;
         context.strokeStyle = 'red';
         context.rect(initialX, initialY, width, height);
@@ -210,6 +227,18 @@
         drawCircle(currentX, currentY, closeEnough); // top right
         drawCircle(currentX, initialY, closeEnough); // bottom right
         drawCircle(initialX, currentY, closeEnough); // top left
+        drawSquare(((currentX + initialX) /2) - 10, ((currentY + initialY) /2) - 10); // middle
+      }
+    }
+
+    function drawEllipseHandles(state, item) {
+      const { initialX, initialY, currentX, currentY, createdAt, shape } = item;
+      if (state.activeSelection && createdAt === state.activeSelection.createdAt && shape === 'ellipse') {
+        drawCircle(initialX, initialY, closeEnough); // bottom left
+        drawCircle(currentX, currentY, closeEnough); // top right
+        drawCircle(currentX, initialY, closeEnough); // bottom right
+        drawCircle(initialX, currentY, closeEnough); // top left
+        drawSquare(((currentX + initialX) /2) - 10, ((currentY + initialY) /2) - 10); // middle
       }
     }
 
@@ -218,6 +247,12 @@
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, 2 * Math.PI);
       ctx.fill();
+    }
+
+    function drawSquare(x, y) {
+      ctx.fillStyle = "#FF0000";
+      ctx.beginPath();
+      ctx.fillRect(x, y, 20, 20);
     }
 
     function draw() {
@@ -231,6 +266,7 @@
         shapeRenderers[item.shape](ctx, item);
         ctx.stroke();
         drawRectangleHandles(state, item);
+        drawEllipseHandles(state, item);
       });
     }
 
