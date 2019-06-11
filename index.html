@@ -106,7 +106,7 @@
           };
           return { ...state, selectionBox };
         case RESIZE_SELECTION_BOX:
-          return { ...state, selectionBox: shapeResize[SELECT_MODE](state.selectionBox, currentX, currentY) };
+          return { ...state, selectionBox: shapeInitialResize[SELECT_MODE](state.selectionBox, currentX, currentY) };
         case SELECT_BOX_END:
           return { ...state, selectionBox: null };
         case RESIZE_SHAPE:
@@ -114,7 +114,7 @@
           currentShape = items.find(shape => shape.createdAt === currentDrawingShapeInstance);
           // We want to change the currentX and currentY for this shape in a functional way;
           // so we filter out the current shape from our list of shapes, and then add a new revised copy of our current shape with the new coordinates
-          return { ...state, items: items.filter(shape => shape.createdAt !== currentDrawingShapeInstance).concat(shapeResize[currentShape.shape](currentShape, currentX, currentY)) };
+          return { ...state, items: items.filter(shape => shape.createdAt !== currentDrawingShapeInstance).concat(shapeInitialResize[currentShape.shape](currentShape, currentX, currentY)) };
         case RESIZE_RECT_OR_ELLIPSE:
           const updatedShapes = state.items.map((shape) => {
             const found = action.activeSelection.find(el => el.createdAt === shape.createdAt);
@@ -234,13 +234,25 @@
       },
     };
 
-    const shapeResize = {
+    const shapeInitialResize = {
       [SELECT_MODE](source, currentX, currentY) {
         return { ...source, currentX, currentY };
       },
       [LINE_MODE](source, currentX, currentY) {
         return { ...source, currentX, currentY };
       },
+      [RECTANGLE_MODE](source, currentX, currentY, corner) {
+        return { ...source, currentX, currentY };
+      },
+      [ELLIPSE_MODE](source, currentX, currentY) {
+        return { ...source, currentX, currentY };
+      },
+      [LASSO_MODE](source, currentX, currentY) {
+        return { ...source, points: (source.points || []).concat({ x: currentX, y: currentY }) };
+      },
+    };
+
+    const shapeResize = {
       [RECTANGLE_MODE](source, currentX, currentY, corner) {
         if (corner === 'TL') {
           return { ...source, initialX: source.initialX + currentX, currentY: source.currentY + currentY };
@@ -251,15 +263,9 @@
         } if (corner === 'TR') {
           return { ...source, currentX: source.currentX + currentX, currentY: source.currentY + currentY };
         }
-        return { ...source, currentX, currentY };
-      },
-      [ELLIPSE_MODE](source, currentX, currentY) {
-        return { ...source, currentX, currentY };
-      },
-      [LASSO_MODE](source, currentX, currentY) {
-        return { ...source, points: (source.points || []).concat({ x: currentX, y: currentY }) };
-      },
-    };
+        return { ...source, currentX, currentY }
+      }
+    }
 
     const shapeTranslate = {
       [LINE_MODE](source, xDraggingDifference, yDraggingDifference) {
