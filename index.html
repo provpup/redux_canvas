@@ -38,7 +38,11 @@
     const TRANSLATE_ITEM_END = 'TRANSLATE_ITEM_END';
 
     const handleHitBox = 10;
+    let activeShapes;
+    let nonActiveShapes;
     let currentShape;
+    let newShape;
+    let selectionBox;
 
     const canvas = document.getElementById('drawingArea');
     const ctx = canvas.getContext('2d');
@@ -47,12 +51,8 @@
       activeSelection: [],
       canvas: { x: 0, y: 0 },
       currentDrawingShapeInstance: '',
-      dragBL: false,
-      dragBR: false,
-      dragTL: false,
-      dragTR: false,
       dragMiddle: false,
-      draggingItemId: null,
+      draggingHandle: '',
       drawingShape: '',
       drawingMode: false,
       items: [],
@@ -63,11 +63,7 @@
 
     function reducer(state, action) {
       if (state !== undefined) {
-        const {
-          currentDrawingShapeInstance,
-          draggingItemId,
-          items,
-        } = state;
+        const { currentDrawingShapeInstance, items } = state;
         const {
           activeSelection,
           initialX,
@@ -75,11 +71,9 @@
           corner,
           currentX = initialX,
           currentY = initialY,
-          dragging,
           drawingShape,
           drawingMode,
-          handle,
-          id,
+          draggingHandle,
           type,
           xDragging,
           yDragging,
@@ -94,14 +88,16 @@
         case DRAWING_MODE:
           return { ...state, drawingMode };
         case DRAG_CORNER_HANDLE:
-          return { ...state, [handle]: dragging, xDragging, yDragging };
+          return {
+            ...state, draggingHandle, xDragging, yDragging,
+          };
         case ADD_SHAPE:
-          const newShape = {
+          newShape = {
             createdAt: Date.now(), shape: state.drawingShape, initialX, initialY,
           };
           return { ...state, currentDrawingShapeInstance: newShape.createdAt, items: items.concat(newShape) };
         case SELECT_BOX:
-          const selectionBox = {
+          selectionBox = {
             shape: state.drawingShape, initialX, initialY,
           };
           return { ...state, selectionBox };
@@ -116,39 +112,35 @@
           // so we filter out the current shape from our list of shapes, and then add a new revised copy of our current shape with the new coordinates
           return { ...state, items: items.filter(shape => shape.createdAt !== currentDrawingShapeInstance).concat(shapeInitialResize[currentShape.shape](currentShape, currentX, currentY)) };
         case RESIZE_RECT_OR_ELLIPSE:
-          const updatedShapes = state.items.map((shape) => {
-            const found = action.activeSelection.find(el => el.createdAt === shape.createdAt);
-            if (found) {
-              return shapeResize[RECTANGLE_MODE](shape, currentX - state.xDragging, currentY - state.yDragging, corner);
-            }
-            return shape;
-          });
-          return { ...state, items: updatedShapes, xDragging: currentX, yDragging: currentY };
+          nonActiveShapes = state.items.filter(shape => !activeSelection.includes(shape.createdAt));
+          activeShapes = state.items
+            .filter(shape => activeSelection.includes(shape.createdAt))
+            .map(container => shapeResize[RECTANGLE_MODE](container, currentX - state.xDragging, currentY - state.yDragging, corner));
+          return {
+            ...state, items: nonActiveShapes.concat(activeShapes), xDragging: currentX, yDragging: currentY,
+          };
         case SET_ACTIVE:
           return { ...state, activeSelection: state.activeSelection.concat(activeSelection) };
         case TRANSLATE_ITEM_START:
           return {
             ...state,
+            draggingHandle,
             xDragging,
             yDragging,
-            draggingItemId: id,
           };
         case TRANSLATE_ITEM:
-          const translatedShapes = state.items.map((shape) => {
-            const found = action.activeSelection.find(el => el.createdAt === shape.createdAt);
-            if (found) {
-              return shapeTranslate[found.shape](shape, xDragging - state.xDragging, yDragging - state.yDragging);
-            } return shape;
-          });
+          nonActiveShapes = state.items.filter(shape => !activeSelection.includes(shape.createdAt));
+          activeShapes = state.items
+            .filter(shape => activeSelection.includes(shape.createdAt))
+            .map(container => shapeTranslate[container.shape](container, xDragging - state.xDragging, yDragging - state.yDragging));
           return {
-            ...state, draggingItemId, items: translatedShapes, xDragging, yDragging,
+            ...state, items: nonActiveShapes.concat(activeShapes), xDragging, yDragging,
           };
         case TRANSLATE_ITEM_END:
           return {
             ...state,
             xDragging: null,
             yDragging: null,
-            draggingItemId: null,
           };
         default:
           return state;
@@ -241,7 +233,7 @@
       [LINE_MODE](source, currentX, currentY) {
         return { ...source, currentX, currentY };
       },
-      [RECTANGLE_MODE](source, currentX, currentY, corner) {
+      [RECTANGLE_MODE](source, currentX, currentY) {
         return { ...source, currentX, currentY };
       },
       [ELLIPSE_MODE](source, currentX, currentY) {
@@ -263,9 +255,9 @@
         } if (corner === 'TR') {
           return { ...source, currentX: source.currentX + currentX, currentY: source.currentY + currentY };
         }
-        return { ...source, currentX, currentY }
-      }
-    }
+        return { ...source, currentX, currentY };
+      },
+    };
 
     const shapeTranslate = {
       [LINE_MODE](source, xDraggingDifference, yDraggingDifference) {
@@ -315,7 +307,6 @@
       },
     };
 
-
     function byTimestamp(a, b) {
       return a.createdAt - b.createdAt;
     }
@@ -330,57 +321,68 @@
         initialX, initialY, currentX, currentY,
       } = item;
       const { offsetX, offsetY } = event;
-      if (state.activeSelection.length && state.activeSelection.find(x => (x.createdAt === item.createdAt))) {
+      if (state.activeSelection.length && state.activeSelection.find(x => (x === item.createdAt))) {
         if (checkHandleHitBox(offsetX, initialX) && checkHandleHitBox(offsetY, initialY)) {
-          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragBL', dragging: true, xDragging: offsetX, yDragging: offsetY });
-          return;
-        } if (checkHandleHitBox(offsetX, currentX) && checkHandleHitBox(offsetY, initialY)) {
-          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragBR', dragging: true, xDragging: offsetX, yDragging: offsetY });
-        } else if (checkHandleHitBox(offsetX, initialX) && checkHandleHitBox(offsetY, currentY)) {
-          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragTL', dragging: true, xDragging: offsetX, yDragging: offsetY });
-        } else if (checkHandleHitBox(offsetX, currentX) && checkHandleHitBox(offsetY, currentY)) {
-          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragTR', dragging: true, xDragging: offsetX, yDragging: offsetY });
-        } else if (checkHandleHitBox(offsetX, (currentX + initialX) / 2) && checkHandleHitBox(offsetY, (currentY + initialY) / 2)) {
           store.dispatch({
-            type: TRANSLATE_ITEM_START, id: item.createdAt, xDragging: offsetX, yDragging: offsetY,
+            type: DRAG_CORNER_HANDLE, draggingHandle: 'bottomLeft', xDragging: offsetX, yDragging: offsetY,
+          });
+          return;
+        }
+        if (checkHandleHitBox(offsetX, currentX) && checkHandleHitBox(offsetY, currentY)) {
+          store.dispatch({
+            type: DRAG_CORNER_HANDLE, draggingHandle: 'topRight', xDragging: offsetX, yDragging: offsetY,
+          });
+          return;
+        }
+        if (checkHandleHitBox(offsetX, currentX) && checkHandleHitBox(offsetY, initialY)) {
+          store.dispatch({
+            type: DRAG_CORNER_HANDLE, draggingHandle: 'bottomRight', xDragging: offsetX, yDragging: offsetY,
+          });
+          return;
+        }
+        if (checkHandleHitBox(offsetX, initialX) && checkHandleHitBox(offsetY, currentY)) {
+          store.dispatch({
+            type: DRAG_CORNER_HANDLE, draggingHandle: 'topLeft', xDragging: offsetX, yDragging: offsetY,
+          });
+          return;
+        }
+        if (checkHandleHitBox(offsetX, (currentX + initialX) / 2) && checkHandleHitBox(offsetY, (currentY + initialY) / 2)) {
+          store.dispatch({
+            type: TRANSLATE_ITEM_START, draggingHandle: 'middle', xDragging: offsetX, yDragging: offsetY,
           });
         }
       }
     }
 
     function checkDraggingHandles(event, state) {
-      const {
-        activeSelection, dragBL, dragBR, dragTL, dragTR, draggingItemId,
-      } = state;
+      const { activeSelection, draggingHandle } = state;
       const { offsetX, offsetY } = event;
-      if (dragTR) {
-        store.dispatch({
-          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'TR', activeSelection,
-        });
-        return;
-      }
-      if (dragTL) {
-        store.dispatch({
-          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'TL', activeSelection,
-        });
-        return;
-      }
-      if (dragBL) {
+      switch (draggingHandle) {
+      case 'bottomLeft':
         store.dispatch({
           type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'BL', activeSelection,
         });
         return;
-      }
-      if (dragBR) {
+      case 'topRight':
+        store.dispatch({
+          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'TR', activeSelection,
+        });
+        return;
+      case 'bottomRight':
         store.dispatch({
           type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'BR', activeSelection,
         });
         return;
-      }
-      if (draggingItemId) {
+      case 'topLeft':
+        store.dispatch({
+          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'TL', activeSelection,
+        });
+        return;
+      case 'middle':
         store.dispatch({
           type: TRANSLATE_ITEM, activeSelection, xDragging: offsetX, yDragging: offsetY,
         });
+      default:
       }
     }
 
@@ -388,7 +390,7 @@
       const {
         initialX, initialY, currentX, currentY, createdAt, shape,
       } = item;
-      if (state.activeSelection.length && state.activeSelection.find(x => x.createdAt === createdAt) && (shape === RECTANGLE_MODE || shape === ELLIPSE_MODE || shape === LINE_MODE)) {
+      if (state.activeSelection.length && state.activeSelection.find(x => x === createdAt) && (shape === RECTANGLE_MODE || shape === ELLIPSE_MODE || shape === LINE_MODE)) {
         drawCircle(initialX, initialY, handleHitBox); // bottom left
         drawCircle(currentX, currentY, handleHitBox); // top right
         drawCircle(currentX, initialY, handleHitBox); // bottom right
@@ -437,31 +439,31 @@
       // Check bottom right to top left
       function checkBRtoTL(item) {
         return (selectionBox.initialX >= item.initialX && selectionBox.currentX <= item.currentX)
-            && (selectionBox.initialY >= item.initialY && selectionBox.currentY <= item.currentY);
+                && (selectionBox.initialY >= item.initialY && selectionBox.currentY <= item.currentY);
       }
 
       // Check top left to bottom right
       function checkTLtoBR(item) {
         return (selectionBox.initialX <= item.initialX && selectionBox.currentX >= item.currentX)
-            && (selectionBox.initialY <= item.initialY && selectionBox.currentY >= item.currentY);
+                && (selectionBox.initialY <= item.initialY && selectionBox.currentY >= item.currentY);
       }
 
       // Check top right to bottom left
       function checkTRtoBL(item) {
         return (selectionBox.initialX <= item.initialX && selectionBox.currentX >= item.currentX)
-            && (selectionBox.initialY >= item.initialY && selectionBox.currentY <= item.currentY);
+                && (selectionBox.initialY >= item.initialY && selectionBox.currentY <= item.currentY);
       }
 
       // Check bottom left to top right
       function checkBLtoTR(item) {
         return (selectionBox.initialX >= item.initialX && selectionBox.currentX <= item.currentX)
-            && (selectionBox.initialY <= item.initialY && selectionBox.currentY >= item.currentY);
+                && (selectionBox.initialY <= item.initialY && selectionBox.currentY >= item.currentY);
       }
 
       for (let i = 0; i < state.items.length; i++) {
         const item = state.items[i];
         if (checkBRtoTL(item) || checkTLtoBR(item) || checkTRtoBL(item) || checkBLtoTR(item)) {
-          store.dispatch({ type: SET_ACTIVE, activeSelection: item });
+          store.dispatch({ type: SET_ACTIVE, activeSelection: item.createdAt });
         }
       }
     }
@@ -526,19 +528,17 @@
 
     canvas.addEventListener('mouseup', () => {
       const state = store.getState();
-      const {
-        xDragging, dragTR, dragTL, dragBR, dragBL,
-      } = state;
+      const { xDragging, draggingHandle } = state;
       // Clear active selection on mouse up if not dragging or resizing a shape
-      if (!xDragging && !dragTR && !dragTL && !dragBR && !dragBL) {
+      if (!xDragging && !draggingHandle) {
         store.dispatch({ type: CLEAR_ACTIVE_SELECTION });
       }
       store.dispatch({ type: TRANSLATE_ITEM_END });
       store.dispatch({ type: DRAWING_MODE, drawingMode: false });
-      store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragTR', dragging: false });
-      store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragTL', dragging: false });
-      store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragBR', dragging: false });
-      store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragBL', dragging: false });
+      store.dispatch({ type: DRAG_CORNER_HANDLE, draggingHandle: '' });
+      store.dispatch({ type: DRAG_CORNER_HANDLE, draggingHandle: '' });
+      store.dispatch({ type: DRAG_CORNER_HANDLE, draggingHandle: '' });
+      store.dispatch({ type: DRAG_CORNER_HANDLE, draggingHandle: '' });
       getOverlapped();
       store.dispatch({ type: SELECT_BOX_END });
       store.dispatch({ type: CLEAR_CURRENT_DRAWING_SHAPE });
