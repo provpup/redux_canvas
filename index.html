@@ -43,79 +43,6 @@
     const canvas = document.getElementById('drawingArea');
     const ctx = canvas.getContext('2d');
 
-    const shapeResize = {
-      [SELECT_MODE](source, currentX, currentY) {
-        return { ...source, currentX, currentY };
-      },
-      [LINE_MODE](source, currentX, currentY) {
-        return { ...source, currentX, currentY };
-      },
-      [RECTANGLE_MODE](source, currentX, currentY, corner) {
-        if (corner === 'TL') {
-          return { ...source, initialX: currentX, currentY };
-        } if (corner === 'BR') {
-          return { ...source, currentX, initialY: currentY };
-        } if (corner === 'BL') {
-          return { ...source, initialX: currentX, initialY: currentY };
-        }
-        return { ...source, currentX, currentY };
-      },
-      [ELLIPSE_MODE](source, currentX, currentY) {
-        return { ...source, currentX, currentY };
-      },
-      [LASSO_MODE](source, currentX, currentY) {
-        return { ...source, points: (source.points || []).concat({ x: currentX, y: currentY }) };
-      },
-    };
-
-    const shapeTranslate = {
-      [LINE_MODE](source, xDraggingDifference, yDraggingDifference) {
-        const {
-          initialX, initialY, currentX, currentY,
-        } = source;
-        return {
-          ...source,
-          initialX: initialX + xDraggingDifference,
-          initialY: initialY + yDraggingDifference,
-          currentX: currentX + xDraggingDifference,
-          currentY: currentY + yDraggingDifference,
-        };
-      },
-      [RECTANGLE_MODE](source, xDraggingDifference, yDraggingDifference) {
-        const {
-          initialX, initialY, currentX, currentY,
-        } = source;
-        return {
-          ...source,
-          initialX: initialX + xDraggingDifference,
-          initialY: initialY + yDraggingDifference,
-          currentX: currentX + xDraggingDifference,
-          currentY: currentY + yDraggingDifference,
-        };
-      },
-      [ELLIPSE_MODE](source, xDraggingDifference, yDraggingDifference) {
-        const {
-          initialX, initialY, currentX, currentY,
-        } = source;
-        return {
-          ...source,
-          initialX: initialX + xDraggingDifference,
-          initialY: initialY + yDraggingDifference,
-          currentX: currentX + xDraggingDifference,
-          currentY: currentY + yDraggingDifference,
-        };
-      },
-      [LASSO_MODE](source, xDraggingDifference, yDraggingDifference) {
-        const { initialX, initialY, points } = source;
-        return {
-          ...source,
-          initialX: initialX + xDraggingDifference,
-          initialY: initialY + yDraggingDifference,
-          points: points.map(point => ({ x: point.x + xDraggingDifference, y: point.y + yDraggingDifference })),
-        };
-      },
-    };
-
     const initialState = {
       activeSelection: [],
       canvas: { x: 0, y: 0 },
@@ -167,12 +94,12 @@
         case DRAWING_MODE:
           return { ...state, drawingMode };
         case DRAG_CORNER_HANDLE:
-          return { ...state, [handle]: dragging };
+          return { ...state, [handle]: dragging, xDragging, yDragging };
         case ADD_SHAPE:
           const newShape = {
             createdAt: Date.now(), shape: state.drawingShape, initialX, initialY,
           };
-          return { ...state, items: items.concat(newShape), currentDrawingShapeInstance: newShape.createdAt };
+          return { ...state, currentDrawingShapeInstance: newShape.createdAt, items: items.concat(newShape) };
         case SELECT_BOX:
           const selectionBox = {
             shape: state.drawingShape, initialX, initialY,
@@ -192,11 +119,11 @@
           const updatedShapes = state.items.map((shape) => {
             const found = action.activeSelection.find(el => el.createdAt === shape.createdAt);
             if (found) {
-              return shapeResize[RECTANGLE_MODE](shape, currentX, currentY, corner);
+              return shapeResize[RECTANGLE_MODE](shape, currentX - state.xDragging, currentY - state.yDragging, corner);
             }
             return shape;
           });
-          return { ...state, items: updatedShapes };
+          return { ...state, items: updatedShapes, xDragging: currentX, yDragging: currentY };
         case SET_ACTIVE:
           return { ...state, activeSelection: state.activeSelection.concat(activeSelection) };
         case TRANSLATE_ITEM_START:
@@ -214,7 +141,7 @@
             } return shape;
           });
           return {
-            ...state, draggingItemId, xDragging, yDragging, items: translatedShapes,
+            ...state, draggingItemId, items: translatedShapes, xDragging, yDragging,
           };
         case TRANSLATE_ITEM_END:
           return {
@@ -307,6 +234,82 @@
       },
     };
 
+    const shapeResize = {
+      [SELECT_MODE](source, currentX, currentY) {
+        return { ...source, currentX, currentY };
+      },
+      [LINE_MODE](source, currentX, currentY) {
+        return { ...source, currentX, currentY };
+      },
+      [RECTANGLE_MODE](source, currentX, currentY, corner) {
+        if (corner === 'TL') {
+          return { ...source, initialX: source.initialX + currentX, currentY: source.currentY + currentY };
+        } if (corner === 'BR') {
+          return { ...source, currentX: source.currentX + currentX, initialY: source.initialY + currentY };
+        } if (corner === 'BL') {
+          return { ...source, initialX: source.initialX + currentX, initialY: source.initialY + currentY };
+        } if (corner === 'TR') {
+          return { ...source, currentX: source.currentX + currentX, currentY: source.currentY + currentY };
+        }
+        return { ...source, currentX, currentY };
+      },
+      [ELLIPSE_MODE](source, currentX, currentY) {
+        return { ...source, currentX, currentY };
+      },
+      [LASSO_MODE](source, currentX, currentY) {
+        return { ...source, points: (source.points || []).concat({ x: currentX, y: currentY }) };
+      },
+    };
+
+    const shapeTranslate = {
+      [LINE_MODE](source, xDraggingDifference, yDraggingDifference) {
+        const {
+          initialX, initialY, currentX, currentY,
+        } = source;
+        return {
+          ...source,
+          initialX: initialX + xDraggingDifference,
+          initialY: initialY + yDraggingDifference,
+          currentX: currentX + xDraggingDifference,
+          currentY: currentY + yDraggingDifference,
+        };
+      },
+      [RECTANGLE_MODE](source, xDraggingDifference, yDraggingDifference) {
+        const {
+          initialX, initialY, currentX, currentY,
+        } = source;
+        return {
+          ...source,
+          initialX: initialX + xDraggingDifference,
+          initialY: initialY + yDraggingDifference,
+          currentX: currentX + xDraggingDifference,
+          currentY: currentY + yDraggingDifference,
+        };
+      },
+      [ELLIPSE_MODE](source, xDraggingDifference, yDraggingDifference) {
+        const {
+          initialX, initialY, currentX, currentY,
+        } = source;
+        return {
+          ...source,
+          initialX: initialX + xDraggingDifference,
+          initialY: initialY + yDraggingDifference,
+          currentX: currentX + xDraggingDifference,
+          currentY: currentY + yDraggingDifference,
+        };
+      },
+      [LASSO_MODE](source, xDraggingDifference, yDraggingDifference) {
+        const { initialX, initialY, points } = source;
+        return {
+          ...source,
+          initialX: initialX + xDraggingDifference,
+          initialY: initialY + yDraggingDifference,
+          points: points.map(point => ({ x: point.x + xDraggingDifference, y: point.y + yDraggingDifference })),
+        };
+      },
+    };
+
+
     function byTimestamp(a, b) {
       return a.createdAt - b.createdAt;
     }
@@ -323,19 +326,55 @@
       const { offsetX, offsetY } = event;
       if (state.activeSelection.length && state.activeSelection.find(x => (x.createdAt === item.createdAt))) {
         if (checkHandleHitBox(offsetX, initialX) && checkHandleHitBox(offsetY, initialY)) {
-          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragBL', dragging: true });
+          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragBL', dragging: true, xDragging: offsetX, yDragging: offsetY });
           return;
         } if (checkHandleHitBox(offsetX, currentX) && checkHandleHitBox(offsetY, initialY)) {
-          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragBR', dragging: true });
+          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragBR', dragging: true, xDragging: offsetX, yDragging: offsetY });
         } else if (checkHandleHitBox(offsetX, initialX) && checkHandleHitBox(offsetY, currentY)) {
-          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragTL', dragging: true });
+          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragTL', dragging: true, xDragging: offsetX, yDragging: offsetY });
         } else if (checkHandleHitBox(offsetX, currentX) && checkHandleHitBox(offsetY, currentY)) {
-          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragTR', dragging: true });
+          store.dispatch({ type: DRAG_CORNER_HANDLE, handle: 'dragTR', dragging: true, xDragging: offsetX, yDragging: offsetY });
         } else if (checkHandleHitBox(offsetX, (currentX + initialX) / 2) && checkHandleHitBox(offsetY, (currentY + initialY) / 2)) {
           store.dispatch({
             type: TRANSLATE_ITEM_START, id: item.createdAt, xDragging: offsetX, yDragging: offsetY,
           });
         }
+      }
+    }
+
+    function checkDraggingHandles(event, state) {
+      const {
+        activeSelection, dragBL, dragBR, dragTL, dragTR, draggingItemId,
+      } = state;
+      const { offsetX, offsetY } = event;
+      if (dragTR) {
+        store.dispatch({
+          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'TR', activeSelection,
+        });
+        return;
+      }
+      if (dragTL) {
+        store.dispatch({
+          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'TL', activeSelection,
+        });
+        return;
+      }
+      if (dragBL) {
+        store.dispatch({
+          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'BL', activeSelection,
+        });
+        return;
+      }
+      if (dragBR) {
+        store.dispatch({
+          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'BR', activeSelection,
+        });
+        return;
+      }
+      if (draggingItemId) {
+        store.dispatch({
+          type: TRANSLATE_ITEM, activeSelection, xDragging: offsetX, yDragging: offsetY,
+        });
       }
     }
 
@@ -380,15 +419,45 @@
       });
     }
 
-    const store = Redux.createStore(reducer);
-    store.subscribe(draw);
+    function getOverlapped() {
+      const state = store.getState();
+      const { selectionBox } = state;
+      if (selectionBox === null) {
+        return;
+      }
+      // Check to see if any shapes are contained within the selection box. The corners of the
+      // selection box depend on which direction the box was drawn. (left to right, top to bottom, etc)
 
-    function switchLine() {
-      store.dispatch({ type: SHAPE_MODE, drawingShape: LINE_MODE });
-    }
+      // Check bottom right to top left
+      function checkBRtoTL(item) {
+        return (selectionBox.initialX >= item.initialX && selectionBox.currentX <= item.currentX)
+            && (selectionBox.initialY >= item.initialY && selectionBox.currentY <= item.currentY);
+      }
 
-    function switchRectangle() {
-      store.dispatch({ type: SHAPE_MODE, drawingShape: RECTANGLE_MODE });
+      // Check top left to bottom right
+      function checkTLtoBR(item) {
+        return (selectionBox.initialX <= item.initialX && selectionBox.currentX >= item.currentX)
+            && (selectionBox.initialY <= item.initialY && selectionBox.currentY >= item.currentY);
+      }
+
+      // Check top right to bottom left
+      function checkTRtoBL(item) {
+        return (selectionBox.initialX <= item.initialX && selectionBox.currentX >= item.currentX)
+            && (selectionBox.initialY >= item.initialY && selectionBox.currentY <= item.currentY);
+      }
+
+      // Check bottom left to top right
+      function checkBLtoTR(item) {
+        return (selectionBox.initialX >= item.initialX && selectionBox.currentX <= item.currentX)
+            && (selectionBox.initialY <= item.initialY && selectionBox.currentY >= item.currentY);
+      }
+
+      for (let i = 0; i < state.items.length; i++) {
+        const item = state.items[i];
+        if (checkBRtoTL(item) || checkTLtoBR(item) || checkTRtoBL(item) || checkBLtoTR(item)) {
+          store.dispatch({ type: SET_ACTIVE, activeSelection: item });
+        }
+      }
     }
 
     function switchEllipse() {
@@ -397,6 +466,14 @@
 
     function switchLasso() {
       store.dispatch({ type: SHAPE_MODE, drawingShape: LASSO_MODE });
+    }
+
+    function switchLine() {
+      store.dispatch({ type: SHAPE_MODE, drawingShape: LINE_MODE });
+    }
+
+    function switchRectangle() {
+      store.dispatch({ type: SHAPE_MODE, drawingShape: RECTANGLE_MODE });
     }
 
     function switchSelect() {
@@ -462,84 +539,11 @@
       // TODO: if we need to immediately  store the shape, then export newly created shape as event
     }, false);
 
-    function checkDraggingHandles(event, state) {
-      const {
-        activeSelection, dragBL, dragBR, dragTL, dragTR, draggingItemId,
-      } = state;
-      const { offsetX, offsetY } = event;
-      if (dragTR) {
-        store.dispatch({
-          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'TR', activeSelection,
-        });
-        return;
-      }
-      if (dragTL) {
-        store.dispatch({
-          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'TL', activeSelection,
-        });
-        return;
-      }
-      if (dragBL) {
-        store.dispatch({
-          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'BL', activeSelection,
-        });
-        return;
-      }
-      if (dragBR) {
-        store.dispatch({
-          type: RESIZE_RECT_OR_ELLIPSE, currentX: offsetX, currentY: offsetY, corner: 'BR', activeSelection,
-        });
-        return;
-      }
-      if (draggingItemId) {
-        store.dispatch({
-          type: TRANSLATE_ITEM, activeSelection, xDragging: offsetX, yDragging: offsetY,
-        });
-      }
-    }
-
-    function getOverlapped() {
-      const state = store.getState();
-      const { selectionBox } = state;
-      if (selectionBox === null) {
-        return;
-      }
-      // Check to see if any shapes are contained within the selection box. The corners of the
-      // selection box depend on which direction the box was drawn. (left to right, top to bottom, etc)
-
-      // Check bottom right to top left
-      function checkBRtoTL(item) {
-        return (selectionBox.initialX >= item.initialX && selectionBox.currentX <= item.currentX)
-            && (selectionBox.initialY >= item.initialY && selectionBox.currentY <= item.currentY);
-      }
-
-      // Check top left to bottom right
-      function checkTLtoBR(item) {
-        return (selectionBox.initialX <= item.initialX && selectionBox.currentX >= item.currentX)
-            && (selectionBox.initialY <= item.initialY && selectionBox.currentY >= item.currentY);
-      }
-
-      // Check top right to bottom left
-      function checkTRtoBL(item) {
-        return (selectionBox.initialX <= item.initialX && selectionBox.currentX >= item.currentX)
-            && (selectionBox.initialY >= item.initialY && selectionBox.currentY <= item.currentY);
-      }
-
-      // Check bottom left to top right
-      function checkBLtoTR(item) {
-        return (selectionBox.initialX >= item.initialX && selectionBox.currentX <= item.currentX)
-            && (selectionBox.initialY <= item.initialY && selectionBox.currentY >= item.currentY);
-      }
-
-      for (let i = 0; i < state.items.length; i++) {
-        const item = state.items[i];
-        if (checkBRtoTL(item) || checkTLtoBR(item) || checkTRtoBL(item) || checkBLtoTR(item)) {
-          store.dispatch({ type: SET_ACTIVE, activeSelection: item });
-        }
-      }
-    }
+    const store = Redux.createStore(reducer);
+    store.subscribe(draw);
 
     draw();
+
     </script>
   </body>
 </html>
