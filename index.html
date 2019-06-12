@@ -3,17 +3,68 @@
   <meta charset="UTF-8">
   <title>Canvas example</title>
   <script src="https://unpkg.com/redux@latest/dist/redux.min.js"></script>
+  <script src="./eventbus.js"></script>
 </head>
 <body>
-  <canvas width="600" height="400" id="drawingArea"  style="background: url('./cat_caviar.jpg')"></canvas>
-  <ul>
-    <li><button onclick='switchLine()'>Line</button></li>
-    <li><button onclick='switchRectangle()'>Rectangle</button></li>
-    <li><button onclick='switchEllipse()'>Ellipse</button></li>
-    <li><button onclick='switchLasso()'>Lasso</button></li>
-    <li><button onclick='switchSelect()'>Select</button></li>
-  </ul>
+  <canvas width="1000" height="500" id="drawingArea"  style="background: url('https://picsum.photos/1000/500')"></canvas>
+  <span style="display: flex;">
+    <ul>
+      <li><button onclick='switchLine()'>Line</button></li>
+      <li><button onclick='switchRectangle()'>Rectangle</button></li>
+      <li><button onclick='switchEllipse()'>Ellipse</button></li>
+      <li><button onclick='switchLasso()'>Lasso</button></li>
+    </ul>
+    <ul>
+      <li><button onclick='deleteSelected()'>Delete</button></li>
+      <li><button onclick='saveShapes()'>Save</button></li>
+      <li><button onclick='loadShapes()'>Load</button></li>
+      <li><button onclick='switchSelect()'>Select</button></li>
+    </ul>
+  </span>
   <script>
+
+    function shapeDeleted(shapes) {
+      console.log(`${shapes} were deleted`);
+    }
+
+    function shapeCreated(shape) {
+      console.log(`${shape.createdAt} was created`);
+    }
+
+    function shapesSelected(shapes) {
+      console.log(`${shapes} were selected`)
+    }
+
+    function shapesMoved(shapes) {
+      console.log((`${shapes} were moved`))
+    }
+
+    function shapeResized(shape) {
+      console.log((`${shape} was resized`))
+    }
+
+    const eventBus = new EventBus('system-events', console.debug);
+    eventBus.subscribe('SHAPES_DELETED', shapeDeleted );
+    eventBus.subscribe('SHAPE_ADDED', shapeCreated );
+    eventBus.subscribe('SHAPES_MOVED', shapesMoved );
+    eventBus.subscribe('SHAPES_SELECTED', shapesSelected );
+    eventBus.subscribe('SHAPES_RESIZED', shapeResized );
+
+    function deleteSelected() {
+      const state = store.getState();
+      eventBus.fire('SHAPES_DELETED', state.activeSelection );
+      store.dispatch({ type: DELETE_SELECTED })
+    }
+
+    function loadShapes() {
+      store.dispatch({ type: LOAD_SHAPES  })
+    }
+
+    function saveShapes() {
+      const state = store.getState();
+      console.log('saved', state.items);
+      store.dispatch({ type: SAVE_SHAPES  })
+    }
     // Constants
     const RECTANGLE_MODE = 'rectangle';
     const ELLIPSE_MODE = 'ellipse';
@@ -24,11 +75,14 @@
     const ADD_SHAPE = 'ADD_SHAPE';
     const CLEAR_ACTIVE_SELECTION = 'CLEAR_ACTIVE_SELECTION';
     const CLEAR_CURRENT_DRAWING_SHAPE = 'CLEAR_CURRENT_DRAWING_SHAPE';
+    const DELETE_SELECTED = 'DELETE_SELECTED';
     const DRAG_CORNER_HANDLE = 'DRAG_CORNER_HANDLE';
     const DRAWING_MODE = 'DRAWING_MODE';
+    const LOAD_SHAPES = 'LOAD_SHAPES';
     const RESIZE_RECT_OR_ELLIPSE = 'RESIZE_RECT_OR_ELLIPSE';
     const RESIZE_SELECTION_BOX = 'RESIZE_SELECTION_BOX';
     const RESIZE_SHAPE = 'RESIZE_SHAPE';
+    const SAVE_SHAPES = 'SAVE_SHAPES'
     const SELECT_BOX = 'SELECT_BOX';
     const SELECT_BOX_END = 'SELECT_BOX_END';
     const SET_ACTIVE = 'SET_ACTIVE';
@@ -56,9 +110,12 @@
       drawingShape: '',
       drawingMode: false,
       items: [],
+      savedShapes: [],
       selectionBox: null,
+      translating: false,
       xDragging: null,
       yDragging: null,
+      eventBus
     };
 
     function reducer(state, action) {
@@ -79,32 +136,28 @@
           yDragging,
         } = action;
         switch (type) {
-        case SHAPE_MODE:
-          return { ...state, drawingShape };
+        case ADD_SHAPE:
+          newShape = {
+            createdAt: Date.now(), shape: state.drawingShape, initialX, initialY,
+          };
+          return { ...state, currentDrawingShapeInstance: newShape.createdAt, items: items.concat(newShape) };
         case CLEAR_CURRENT_DRAWING_SHAPE:
           return { ...state, currentDrawingShapeInstance: '' };
         case CLEAR_ACTIVE_SELECTION:
           return { ...state, activeSelection: [] };
+        case DELETE_SELECTED:
+          nonActiveShapes = items.filter(shape => !state.activeSelection.includes(shape.createdAt));
+          return {...state, items: nonActiveShapes}
         case DRAWING_MODE:
           return { ...state, drawingMode };
         case DRAG_CORNER_HANDLE:
           return {
             ...state, draggingHandle, xDragging, yDragging,
           };
-        case ADD_SHAPE:
-          newShape = {
-            createdAt: Date.now(), shape: state.drawingShape, initialX, initialY,
-          };
-          return { ...state, currentDrawingShapeInstance: newShape.createdAt, items: items.concat(newShape) };
-        case SELECT_BOX:
-          selectionBox = {
-            shape: state.drawingShape, initialX, initialY,
-          };
-          return { ...state, selectionBox };
+        case LOAD_SHAPES:
+          return { ...state, items: state.savedShapes }
         case RESIZE_SELECTION_BOX:
           return { ...state, selectionBox: shapeInitialResize[SELECT_MODE](state.selectionBox, currentX, currentY) };
-        case SELECT_BOX_END:
-          return { ...state, selectionBox: null };
         case RESIZE_SHAPE:
           // Get the current shape based on the saved timestamp
           currentShape = items.find(shape => shape.createdAt === currentDrawingShapeInstance);
@@ -119,14 +172,26 @@
           return {
             ...state, items: nonActiveShapes.concat(activeShapes), xDragging: currentX, yDragging: currentY,
           };
+        case SAVE_SHAPES:
+          return {...state, savedShapes: items }
+        case SELECT_BOX:
+          selectionBox = {
+            shape: state.drawingShape, initialX, initialY,
+          };
+          return { ...state, selectionBox };
+        case SELECT_BOX_END:
+          return { ...state, selectionBox: null };
         case SET_ACTIVE:
           return { ...state, activeSelection: state.activeSelection.concat(activeSelection) };
+        case SHAPE_MODE:
+          return { ...state, drawingShape };
         case TRANSLATE_ITEM_START:
           return {
             ...state,
             draggingHandle,
             xDragging,
             yDragging,
+            translating: true,
           };
         case TRANSLATE_ITEM:
           nonActiveShapes = state.items.filter(shape => !activeSelection.includes(shape.createdAt));
@@ -141,6 +206,7 @@
             ...state,
             xDragging: null,
             yDragging: null,
+            translating: false,
           };
         default:
           return state;
@@ -427,9 +493,10 @@
       });
     }
 
-    function getOverlapped() {
+    async function getOverlapped() {
       const state = store.getState();
-      const { selectionBox } = state;
+      const { activeSelection, selectionBox } = state;
+      let shapesActivated = false;
       if (selectionBox === null) {
         return;
       }
@@ -460,11 +527,17 @@
                 && (selectionBox.initialY <= item.initialY && selectionBox.currentY >= item.currentY);
       }
 
-      for (let i = 0; i < state.items.length; i++) {
-        const item = state.items[i];
+      const shapeIds = [];
+      for (const item of state.items) {
         if (checkBRtoTL(item) || checkTLtoBR(item) || checkTRtoBL(item) || checkBLtoTR(item)) {
-          store.dispatch({ type: SET_ACTIVE, activeSelection: item.createdAt });
+          shapesActivated = true;
+          shapeIds.push(item.createdAt)
         }
+      }
+
+      if (shapesActivated) {
+        store.dispatch({ type: SET_ACTIVE, activeSelection: shapeIds });
+        eventBus.fire('SHAPES_SELECTED', shapeIds)
       }
     }
 
@@ -528,20 +601,28 @@
 
     canvas.addEventListener('mouseup', () => {
       const state = store.getState();
-      const { xDragging, draggingHandle } = state;
+      const { xDragging, currentDrawingShapeInstance, draggingHandle, translating } = state;
       // Clear active selection on mouse up if not dragging or resizing a shape
       if (!xDragging && !draggingHandle) {
         store.dispatch({ type: CLEAR_ACTIVE_SELECTION });
       }
-      store.dispatch({ type: TRANSLATE_ITEM_END });
+      if (translating) {
+        store.dispatch({ type: TRANSLATE_ITEM_END });
+        eventBus.fire('SHAPES_MOVED', state.activeSelection );
+      }
       store.dispatch({ type: DRAWING_MODE, drawingMode: false });
-      store.dispatch({ type: DRAG_CORNER_HANDLE, draggingHandle: '' });
-      store.dispatch({ type: DRAG_CORNER_HANDLE, draggingHandle: '' });
-      store.dispatch({ type: DRAG_CORNER_HANDLE, draggingHandle: '' });
-      store.dispatch({ type: DRAG_CORNER_HANDLE, draggingHandle: '' });
+      if (draggingHandle) {
+        store.dispatch({ type: DRAG_CORNER_HANDLE, draggingHandle: '' });
+        if (draggingHandle !== 'middle') {
+          eventBus.fire('SHAPES_RESIZED', state.activeSelection)
+        }
+      }
       getOverlapped();
       store.dispatch({ type: SELECT_BOX_END });
-      store.dispatch({ type: CLEAR_CURRENT_DRAWING_SHAPE });
+      if (currentDrawingShapeInstance) {
+        eventBus.fire('SHAPE_ADDED', state.items[state.items.length - 1])
+        store.dispatch({ type: CLEAR_CURRENT_DRAWING_SHAPE });
+      }
       // TODO: if we need to immediately  store the shape, then export newly created shape as event
     }, false);
 
