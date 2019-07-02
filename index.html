@@ -2,26 +2,105 @@
 <head>
   <meta charset="UTF-8">
   <title>Canvas example</title>
+  <script src="https://kit.fontawesome.com/3b619d716e.js"></script>
   <script src="https://unpkg.com/redux@latest/dist/redux.min.js"></script>
   <script src="./eventbus.js"></script>
 </head>
 <body>
-  <canvas width="1000" height="500" id="drawingArea"  style="background: url('https://picsum.photos/1000/500')"></canvas>
-  <span style="display: flex;">
-    <ul>
-      <li><button onclick='switchLine()'>Line</button></li>
-      <li><button onclick='switchRectangle()'>Rectangle</button></li>
-      <li><button onclick='switchEllipse()'>Ellipse</button></li>
-      <li><button onclick='switchLasso()'>Lasso</button></li>
-    </ul>
-    <ul>
-      <li><button onclick='deleteSelected()'>Delete</button></li>
-      <li><button onclick='saveShapes()'>Save</button></li>
-      <li><button onclick='loadShapes()'>Load</button></li>
-      <li><button onclick='switchSelect()'>Select</button></li>
-    </ul>
-  </span>
+  <style>
+    .icon-bar {
+      background-color: #555;
+      display: flex;
+      justify-content: space-evenly;
+      overflow: auto;
+    }
+
+    .icon-bar a {
+      float: left;
+      text-align: center;
+      width: 10%;
+      padding: 12px 0;
+      transition: all 0.3s ease;
+      color: white;
+      font-size: 24px;
+    }
+
+    .icon-bar a:hover {
+      background-color: #000;
+      cursor: pointer;
+    }
+
+    /* Dropdown Content (Hidden by Default) */
+    .dropdown-content {
+      display: none;
+      flex-direction: column;
+      justify-content: space-around;
+      min-width: 120px;
+      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+      z-index: 1;
+      position: absolute;
+      align-self: flex-end;
+      bottom: 210px;
+    }
+
+    /* Links inside the dropdown */
+    .dropdown-content div a i {
+      color: black;
+      padding: 12px 16px;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    /* Change color of dropdown links on hover */
+    .dropdown-content a i:hover { background-color: #ddd }
+
+    .svg-white {
+      filter: invert(100%) sepia(99%) saturate(2%) hue-rotate(219deg) brightness(106%) contrast(100%);
+      width: 25%;
+      transition: all 0.3s ease;
+    }
+
+
+  </style>
+  <div style="height: 600px; width:1000px;">
+    <canvas height="600" width="1000" id="drawingArea" style="background: url('./heart.png'); background-repeat: no-repeat; background-size: 600px 600px;"></canvas>
+    <div style="display: flex; flex-direction:column;">
+      <div id="myDropdown" class="dropdown-content">
+        <div>
+          <a><i style="color: red;" class="fas fa-circle"></i></a>
+          <a><i style="color: blue;" class="fas fa-circle"></i></a>
+          <a><i style="color: green;" class="fas fa-circle"></i></a>
+        </div>
+        <div>
+          <a><i style="color: yellow;" class="fas fa-circle"></i></a>
+          <a><i style="color: purple;" class="fas fa-circle"></i></a>
+          <a><i style="color: orange;" class="fas fa-circle"></i></a>
+        </div>
+      </div>
+      <div class="icon-bar" style="width: 100%;">
+        <a onclick='switchSelect()'><i class="fas fa-mouse-pointer"></i></a>
+        <a onclick='switchLine()'><i class="fas fa-minus"></i></a>
+        <a onclick='switchRectangle()'><i class="far fa-square"></i></a>
+        <a onclick='switchEllipse()'><i class="far fa-circle"></i></a>
+        <a onclick='switchLasso()'><img class="svg-white" src="./lasso.svg"></a>
+        <a onclick='deleteSelected()'><i class="far fa-trash-alt"></i></a>
+        <!-- <a onclick='saveShapes()'><i class="far fa-save"></i></a>
+        <a onclick='loadShapes()'><i class="far fa-folder-open"></i></a> -->
+        <a onclick='showHidePalette()'><i class="fas fa-palette"></i></a>
+      </div>
+    </div>
+    <!-- <div style="color:lightgray;">Icons made by <a style="color:lightgray;" href="https://www.freepik.com/" title="Freepik">Freepik</a> from <a style="color:lightgray;" href="https://www.flaticon.com/" s                title="Flaticon">www.flaticon.com</a> is licensed by <a style="color:lightgray;" href="http://creativecommons.org/licenses/by/3.0/"                 title="Creative Commons BY 3.0" target="_blank">CC 3.0 BY</a></div> -->
+  </div>
   <script>
+
+    function showHidePalette() {
+      var dropDown = document.getElementById("myDropdown");
+      if (dropDown.style.display === "block") {
+        dropDown.style.display = "none";
+      } else {
+        dropDown.style.display = "block";
+      }
+    }
 
     function shapeDeleted(shapes) {
       console.log(`${shapes} were deleted`);
@@ -228,10 +307,9 @@
           const height = endY - initialY;
           context.beginPath();
           context.save();
-          context.rect(initialX, initialY, width, height);
           context.lineWidth = 3;
           context.strokeStyle = 'yellow';
-          context.stroke();
+          context.strokeRect(initialX, initialY, width, height);
           context.restore();
         }
       },
@@ -243,7 +321,7 @@
         context.save();
         context.moveTo(initialX, initialY);
         context.lineTo(endX, endY);
-        context.lineWidth = 3;
+        context.lineWidth = 5;
         context.strokeStyle = 'green';
         context.stroke();
         context.restore();
@@ -256,10 +334,9 @@
         const height = endY - initialY;
         context.beginPath();
         context.save();
-        context.rect(initialX, initialY, width, height);
-        context.lineWidth = 3;
+        context.lineWidth = 5;
         context.strokeStyle = 'red';
-        context.stroke();
+        context.strokeRect(initialX, initialY, width, height);
         context.restore();
       },
       [ELLIPSE_MODE](context, ellipse) {
@@ -277,7 +354,7 @@
         context.restore();
         context.save();
         context.strokeStyle = 'blue';
-        context.lineWidth = 4;
+        context.lineWidth = 5;
         context.stroke();
         context.restore();
       },
@@ -487,7 +564,6 @@
     }
 
     function selectOverlappedShapes(items, selectionBox) {
-      // origin is at the top left corner
       const {top: selectionTop, bottom: selectionBottom, right: selectionRight, left: selectionLeft} = getShapeBoundaries(selectionBox);
       const shapesOverlappedBySelection = items.filter((shape) => {
         const {top, bottom, right, left} = getShapeBoundaries(shape);
